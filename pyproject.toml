@@ -18,12 +18,14 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
+    "aiofiles>=24.1.0",
     "click>=8.1.8",
     "lancedb>=0.21.2",
     "loguru>=0.7.3",
     "numpy>=2.0.2",
     "pydantic>=2.11.2",
     "rich>=14.0.0",
+    "tqdm>=4.67.1",
 ]
 
 [project.urls]

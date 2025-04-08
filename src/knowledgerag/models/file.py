@@ -2,7 +2,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Annotated
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class FileDescription(BaseModel):
@@ -16,7 +16,7 @@ class FileDescription(BaseModel):
         BaseModel ([type]): [description]
     """
 
-    path: Annotated[Path, Field(description="File path.")]
+    path: Annotated[str, Field(description="File path.")]
     filename: Annotated[str, Field(description="Filename.")]
     owner: Annotated[str, Field(description="File owner.")]
     group: Annotated[str, Field(description="Group.")]
@@ -27,12 +27,22 @@ class FileDescription(BaseModel):
     suffix: Annotated[str, Field(description="File suffix.")]
     hash_value: Annotated[str, Field(description="File hashing result.")]
     size_kb: Annotated[str, Field(description="File size in KB.")]
-    mmetadata_date: Annotated[datetime, Field(description="Metadata date.")]
-    modified_date: Annotated[datetime, Field(description="File modified date.")]
-    last_access_date: Annotated[datetime, Field(description="File last access date.")]
-    query_date: Annotated[datetime, Field(description="Last query date.")]
+    mmetadata_date: Annotated[str, Field(description="Metadata date.")]
+    modified_date: Annotated[str, Field(description="File modified date.")]
+    last_access_date: Annotated[str, Field(description="File last access date.")]
+    query_date: Annotated[str, Field(description="Last query date.")]
     pages: Annotated[int | None, Field(default=None, description="Number of pages.")]
     author: Annotated[str | None, Field(default=None, description="File / document author.")]
     keywords: Annotated[list[str] | None, Field(default=None, descriptions="File keywords.")]
     version: Annotated[str | None, Field(default=None, description="File version.")]
     is_encrypted: Annotated[bool | None, Field(default=False, description="Is file encrypted.")]
+
+    @field_validator("path", mode="before")
+    @classmethod
+    def path_to_str(cls, value: Path) -> str:
+        return str(value.resolve())
+
+    @field_validator("mmetadata_date", "modified_date", "last_access_date", "query_date", mode="before")
+    @classmethod
+    def datetime_to_str(cls, value: datetime) -> str:
+        return value.strftime("%Y-%m-%d %H:%M:%S")
