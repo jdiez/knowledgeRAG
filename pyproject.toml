@@ -17,6 +17,14 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
+dependencies = [
+    "click>=8.1.8",
+    "lancedb>=0.21.2",
+    "loguru>=0.7.3",
+    "numpy>=2.0.2",
+    "pydantic>=2.11.2",
+    "rich>=14.0.0",
+]
 
 [project.urls]
 Homepage = "https://jdiez.github.io/knowledgeRAG/"
@@ -113,4 +121,3 @@ skip_empty = true
 [tool.coverage.run]
 branch = true
 source = ["src"]
-
