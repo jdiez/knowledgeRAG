@@ -1,28 +1,22 @@
-import os
-from pathlib import Path
-from tempfile import mkdtemp
 
 from docling_haystack.converter import ExportType
 from docling_haystack.converter import DoclingConverter
 from haystack import Pipeline
 from haystack.components.embedders import (
     SentenceTransformersDocumentEmbedder,
-    SentenceTransformersTextEmbedder,
 )
 from haystack.components.preprocessors import DocumentSplitter
 from haystack.components.writers import DocumentWriter
-from dotenv import load_dotenv
-from milvus_haystack import MilvusDocumentStore, MilvusEmbeddingRetriever
+from milvus_haystack import MilvusDocumentStore
 
 from docling.chunking import HybridChunker
 
-# load_dotenv()
 
 HF_TOKEN = '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'    # read
 PATHS = ["https://arxiv.org/pdf/2408.09869"]  # Docling Technical Report
 EMBED_MODEL_ID = "sentence-transformers/all-MiniLM-L6-v2"
 EXPORT_TYPE = ExportType.DOC_CHUNKS
-MILVUS_URI = "docling.db"
+MILVUS_URI = "/home/jdiez/Desktop/docling.db"
 
 
 document_store = MilvusDocumentStore(
