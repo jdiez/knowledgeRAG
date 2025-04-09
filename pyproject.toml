@@ -20,13 +20,16 @@ classifiers = [
 dependencies = [
     "aiofiles>=24.1.0",
     "click>=8.1.8",
+    "docling-haystack>=0.1.1",
     "duckdb>=1.2.2",
     "lancedb>=0.21.2",
     "loguru>=0.7.3",
+    "milvus-haystack>=0.0.15",
     "numpy>=2.0.2",
     "pandas>=2.2.3",
     "pydantic>=2.11.2",
     "rich>=14.0.0",
+    "sentence-transformers>=4.0.2",
     "tqdm>=4.67.1",
 ]
 
