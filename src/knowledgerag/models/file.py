@@ -1,11 +1,18 @@
-from datetime import datetime
+"""AI is creating summary for
+
+Returns:
+    [type]: [description]
+"""
+
+from datetime import datetime  # Used for date-related field validation
 from pathlib import Path
 from typing import Annotated
 
-from pydantic import BaseModel, Field, field_validator
+from lancedb.pydantic import LanceModel
+from pydantic import Field, field_validator
 
 
-class FileDescription(BaseModel):
+class FileDescription(LanceModel):
     """It is used to create a file description data structure.
     It contains the file path, file name, owner, group, mode, uid, gid,
     permissions, suffix, sha256, size_kb, metadata date, modified date,

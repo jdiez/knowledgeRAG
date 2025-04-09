@@ -3,6 +3,7 @@ from pathlib import Path
 
 import click
 import lancedb
+from lancedb.pydantic import pydantic_to_schema
 from loguru import logger
 
 from knowledgerag.io.reader.reader import main_file_reader
@@ -30,15 +31,20 @@ def main_ingestion(db_path: str, table_name: str, schema_name: str, mode: str, d
     database_path = Path(db_path).resolve()
     try:
         db = lancedb.connect(database_path)
-        table_ = db.create_table(table_name, schema=schema, mode=mode)
+
     except Exception as e:
         click.echo(f"Database error: {e}")
         return
     else:
         if data_dir is not None:
             try:
-                table_.add(list(main_file_reader(Path(data_dir))))
-            except lancedb.TableError as e:
+                db.create_table(
+                    table_name,
+                    schema=pydantic_to_schema(schema),
+                    mode=mode,
+                    data=list(main_file_reader(Path(data_dir))),
+                )
+            except Exception as e:
                 logger.error(f"Table error: {e}")
                 return
             else:
