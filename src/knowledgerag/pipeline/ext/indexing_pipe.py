@@ -11,12 +11,15 @@ from milvus_haystack import MilvusDocumentStore
 
 from docling.chunking import HybridChunker
 
+from lancedb_haystack import LanceDBDocumentStore
+from lancedb_haystack import LanceDBEmbeddingRetriever, LanceDBFTSRetriever
 
 HF_TOKEN = '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'    # read
 PATHS = ["https://arxiv.org/pdf/2408.09869"]  # Docling Technical Report
 EMBED_MODEL_ID = "sentence-transformers/all-MiniLM-L6-v2"
 EXPORT_TYPE = ExportType.DOC_CHUNKS
 MILVUS_URI = "/home/jdiez/Desktop/docling.db"
+LANCE_URI = "/home/jdiez/Desktop/docling_lcdb.db"
 
 
 document_store = MilvusDocumentStore(
@@ -24,7 +27,10 @@ document_store = MilvusDocumentStore(
     drop_old=True,
     text_field="txt",  # set for preventing conflict with same-name metadata field
 )
-
+document_store_ldb = LanceDBDocumentStore(
+  database=LANCE_URI,
+  table_name="documents",
+)
 idx_pipe = Pipeline()
 idx_pipe.add_component(
     "converter",

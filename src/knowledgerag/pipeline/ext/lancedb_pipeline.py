@@ -17,9 +17,9 @@ metadata_schema = pa.struct([
 
 # Create the DocumentStore
 document_store = LanceDBDocumentStore(
-  database='my_database', 
-  table_name="documents", 
-  metadata_schema=metadata_schema, 
+  database='my_database',
+  table_name="documents",
+  metadata_schema=metadata_schema,
   embedding_dims=384    # would come from the embedding model.
 )
 

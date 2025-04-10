@@ -89,6 +89,14 @@ def main():
     output_filename = output_dir / f"multimodal_{now:%Y-%m-%d_%H%M%S}.parquet"
     df.to_parquet(output_filename)
 
+    import lancedb
+
+    uri = "/home/jdiez/Downloads/scratch/sample_lancedb"
+    db = lancedb.connect(uri)
+    df.columns = df.columns.str.replace(".", "_")
+    db.create_table('pd_table', data=df)
+
+
     end_time = time.time() - start_time
 
     _log.info(
@@ -96,16 +104,16 @@ def main():
     )
 
     # This block demonstrates how the file can be opened with the HF datasets library
-    from datasets import Dataset
-    from PIL import Image
-    multimodal_df = pd.read_parquet(output_filename)
+    # from datasets import Dataset
+    # from PIL import Image
+    # multimodal_df = pd.read_parquet(output_filename)
 
-    # Convert pandas DataFrame to Hugging Face Dataset and load bytes into image
-    dataset = Dataset.from_pandas(multimodal_df)
-    def transforms(examples):
-        examples["image"] = Image.frombytes('RGB', (examples["image.width"], examples["image.height"]), examples["image.bytes"], 'raw')
-        return examples
-    dataset = dataset.map(transforms)
+    # # Convert pandas DataFrame to Hugging Face Dataset and load bytes into image
+    # dataset = Dataset.from_pandas(multimodal_df)
+    # def transforms(examples):
+    #     examples["image"] = Image.frombytes('RGB', (examples["image.width"], examples["image.height"]), examples["image.bytes"], 'raw')
+    #     return examples
+    # dataset = dataset.map(transforms)
 
 
 
