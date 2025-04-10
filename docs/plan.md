@@ -15,6 +15,20 @@
     - Element extraction from documents: text, tables, and images.
     - Splitting and Indexing document elements.
 
+## 4.- Database ingestion:
+    - Assets metadata.
+    - Vectors.
+    - Client for relational and vector queries.
+
+## 5.- Ingestion Pipeline:
+    - Implement pipelines.
+    - Parameters.
+
+## 6.- RAG:
+    - Typing.
+    - Resources.
+    - Pipelines.
+
 
 ## Knowledge Graphs:
     - [AI Powered Knowledge Graph Generator](https://github.com/robert-mcdermott/ai-knowledge-graph/tree/main)
