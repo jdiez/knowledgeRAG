@@ -1,0 +1,24 @@
+llms:
+  - name: AzureOpenAI
+    credentials:
+      api_key: x
+      azure_aoi_endpoint: x
+      azure_aoi_key: x
+      model_version: x
+      deployment: x
+    args:
+
+database:
+  - name: Lancedb
+    path: x
+    database_name: x
+    table_name: x
+pipeline:
+  - name:
+    allowed_file_types:
+      - x
+      - y
+      - z
+    embedding: x
+    tokenizer: x
+    chunker: x

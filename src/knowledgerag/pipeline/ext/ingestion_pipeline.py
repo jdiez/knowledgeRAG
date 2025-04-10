@@ -12,20 +12,28 @@ from docling.datamodel.pipeline_options import (
     PdfPipelineOptions,
     TableFormerMode,
 )
-from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling_core.transforms.chunker.hybrid_chunker import HybridChunker
-from sentence_transformers import SentenceTransformer
-from langchain_ibm import WatsonxLLM
+from docling.document_converter import DocumentConverter, PdfFormatOption, WordFormatOption
+from docling.pipeline.simple_pipeline import SimplePipeline
 import lancedb
-from tempfile import mkdtemp
-import os
+from loguru import logger
+from sentence_transformers import SentenceTransformer
 
 
 class DocumentProcessor:
-    def __init__(self):
+    def __init__(self,
+                 tokenizer: str = "jinaai/jina-embeddings-v3",
+                 embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
+                 db_uri: str = "/home/jdiez/Downloads/scratch/docling.db",
+                 db_table_name: str = "document_chunks"
+                 ) -> None:
         """Initialize document processor with necessary components"""
-        self.api_key = os.getenv("WATSONX_API_KEY", None)
-        self.project_id = os.getenv("WATSONX_PROJECT_ID", None)
+        # self.api_key = os.getenv("WATSONX_API_KEY", None)
+        # self.project_id = os.getenv("WATSONX_PROJECT_ID", None)
+        self.tokenizer = tokenizer
+        self.embedding_model = embedding_model
+        self.db_uri = db_uri
+        self.db_table_name = db_table_name
         self.setup_document_converter()
         self.setup_ml_components()
 
@@ -40,14 +48,29 @@ class DocumentProcessor:
         pipeline_options.accelerator_options = AcceleratorOptions(num_threads=8, device=AcceleratorDevice.MPS)
 
         self.converter = DocumentConverter(
+            allowed_formats=[
+                InputFormat.PDF,
+                # InputFormat.IMAGE,    # could transform image to text, text embedding and include in the db.
+                InputFormat.DOCX,
+                InputFormat.HTML,
+                InputFormat.PPTX,
+                InputFormat.ASCIIDOC,
+                InputFormat.CSV,
+                InputFormat.MD,
+            ],  # whitelist formats, non-matching files are ignored.
             format_options={
-                InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options, backend=PyPdfiumDocumentBackend)
+                InputFormat.PDF: PdfFormatOption(
+                    pipeline_options=pipeline_options, backend=PyPdfiumDocumentBackend
+                    ),
+                InputFormat.DOCX: WordFormatOption(
+                    pipeline_cls=SimplePipeline  # , backend=MsWordDocumentBackend
+                    ),
             }
         )
 
     def setup_ml_components(self):
         """Initialize embedding model and LLM"""
-        self.embed_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+        self.embed_model = SentenceTransformer(self.embedding_model)
         # self.llm = WatsonxLLM(
         #     model_id="mistralai/mixtral-8x7b-instruct-v01",
         #     url="https://us-south.ml.cloud.ibm.com",
@@ -56,9 +79,11 @@ class DocumentProcessor:
         #     params={"max_new_tokens": 2000},
         # )
 
-    def extract_chunk_metadata(self, chunk) -> dict[str, Any]:
+    def extract_chunk_metadata(self, chunk,
+                               metadata = {"text": "", "headings": [], "page_info": None, "content_type": None}) -> dict[str, Any]:
         """Extract essential metadata from a chunk"""
-        metadata = {"text": chunk.text, "headings": [], "page_info": None, "content_type": None}
+        if "text" in metadata:
+            metadata["text"] = chunk.text
 
         if hasattr(chunk, "meta"):
             # Extract headings
@@ -80,7 +105,7 @@ class DocumentProcessor:
 
     def process_document(self, pdf_path: str) -> Any:
         """Process document and create searchable index with metadata"""
-        print(f"Processing document: {pdf_path}")
+        logger.info(f"Processing document: {pdf_path}")
         start_time = time.time()
 
         # Convert document
@@ -88,28 +113,27 @@ class DocumentProcessor:
         doc = result.document
 
         # Create chunks using hybrid chunker
-        chunker = HybridChunker(tokenizer="jinaai/jina-embeddings-v3")
+        chunker = HybridChunker(tokenizer=self.tokenizer)
         chunks = list(chunker.chunk(doc))
 
         # Process chunks and extract metadata
-        print("\nProcessing chunks:")
+        logger.info("\nProcessing chunks:")
         processed_chunks = []
         for i, chunk in enumerate(chunks):
             metadata = self.extract_chunk_metadata(chunk)
             processed_chunks.append(metadata)
 
             # Print chunk information for inspection
-            # print(f"\nChunk {i}:")
+            # logger.info(f"\nChunk {i}:")
             # if metadata['headings']:
-            #     print(f"Section: {' > '.join(metadata['headings'])}")
-            # print(f"Page: {metadata['page_info']}")
-            # print(f"Type: {metadata['content_type']}")
-            # print("-" * 40)
+            #     logger.info(f"Section: {' > '.join(metadata['headings'])}")
+            # logger.info(f"Page: {metadata['page_info']}")
+            # logger.info(f"Type: {metadata['content_type']}")
+            # logger.info("-" * 40)
 
         # Create vector database
-        print("\nCreating vector database...")
-        db_uri = str(Path(mkdtemp()) / "docling.db")
-        self.db = lancedb.connect(db_uri)
+        logger.info("\nCreating vector database...")
+        self.db = lancedb.connect(self.db_uri)
 
         # Store chunks with embeddings and metadata
         data = []
@@ -124,10 +148,10 @@ class DocumentProcessor:
             }
             data.append(data_item)
 
-        self.index = self.db.create_table("document_chunks", data=data, exist_ok=True)
+        self.index = self.db.create_table(self.db_table_name, data=data, exist_ok=True)
 
         processing_time = time.time() - start_time
-        print(f"\nDocument processing completed in {processing_time:.2f} seconds")
+        logger.info(f"\nDocument processing completed in {processing_time:.2f} seconds")
         return self.index
 
     def format_context(self, chunks: list[dict]) -> str:
@@ -139,7 +163,7 @@ class DocumentProcessor:
                 headings = json.loads(chunk["headings"])
                 if headings:
                     context_parts.append(f"Section: {' > '.join(headings)}")
-            except:
+            except Exception as e:
                 pass
 
             # Add page reference
@@ -160,12 +184,12 @@ class DocumentProcessor:
         chunks = results.to_pandas()
 
         # Display retrieved chunks with their context
-        print(f"\nRelevant chunks for query: '{question}'")
-        print("=" * 80)
+        logger.info(f"\nRelevant chunks for query: '{question}'")
+        logger.info("=" * 80)
 
         # Format chunks for display and LLM
         context = self.format_context(chunks.to_dict("records"))
-        print(context)
+        logger.info(context)
 
         # Generate answer using structured context
         prompt = f"""Based on the following excerpts from a document:
@@ -192,9 +216,9 @@ def main():
     # Example query
     question = "What are the main features of InternLM-XComposer-2.5?"
     # answer = processor.query(question)
-    # print("\nAnswer:")
-    # print("=" * 80)
-    # print(answer)
+    # logger.info("\nAnswer:")
+    # logger.info("=" * 80)
+    # logger.info(answer)
 
 
 if __name__ == "__main__":
