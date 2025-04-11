@@ -1,9 +1,9 @@
 import json
 import logging
 import time
-from pathlib import Path
 from typing import Any
 
+import lancedb
 from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
 from docling.datamodel.base_models import InputFormat
 from docling.datamodel.pipeline_options import (
@@ -12,21 +12,31 @@ from docling.datamodel.pipeline_options import (
     PdfPipelineOptions,
     TableFormerMode,
 )
-from docling_core.transforms.chunker.hybrid_chunker import HybridChunker
 from docling.document_converter import DocumentConverter, PdfFormatOption, WordFormatOption
 from docling.pipeline.simple_pipeline import SimplePipeline
-import lancedb
+from docling_core.transforms.chunker.hybrid_chunker import HybridChunker
 from loguru import logger
+from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer
 
 
+class ChunkMetadata(BaseModel):
+    """Metadata model for document chunks"""
+
+    text: str | None = ""
+    headings: list[str] | None = None
+    page_info: int | None = None
+    content_type: str | None = None
+
+
 class DocumentProcessor:
-    def __init__(self,
-                 tokenizer: str = "jinaai/jina-embeddings-v3",
-                 embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
-                 db_uri: str = "/home/jdiez/Downloads/scratch/docling.db",
-                 db_table_name: str = "document_chunks"
-                 ) -> None:
+    def __init__(
+        self,
+        tokenizer: str = "jinaai/jina-embeddings-v3",
+        embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
+        db_uri: str = "/home/jdiez/Downloads/scratch/docling.db",
+        db_table_name: str = "document_chunks",
+    ) -> None:
         """Initialize document processor with necessary components"""
         # self.api_key = os.getenv("WATSONX_API_KEY", None)
         # self.project_id = os.getenv("WATSONX_PROJECT_ID", None)
@@ -59,13 +69,11 @@ class DocumentProcessor:
                 InputFormat.MD,
             ],  # whitelist formats, non-matching files are ignored.
             format_options={
-                InputFormat.PDF: PdfFormatOption(
-                    pipeline_options=pipeline_options, backend=PyPdfiumDocumentBackend
-                    ),
+                InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options, backend=PyPdfiumDocumentBackend),
                 InputFormat.DOCX: WordFormatOption(
                     pipeline_cls=SimplePipeline  # , backend=MsWordDocumentBackend
-                    ),
-            }
+                ),
+            },
         )
 
     def setup_ml_components(self):
@@ -79,9 +87,9 @@ class DocumentProcessor:
         #     params={"max_new_tokens": 2000},
         # )
 
-    def extract_chunk_metadata(self, chunk,
-                               metadata = {"text": "", "headings": [], "page_info": None, "content_type": None}) -> dict[str, Any]:
+    def extract_chunk_metadata(self, chunk, metadata: ChunkMetadata) -> dict[str, Any]:
         """Extract essential metadata from a chunk"""
+        metadata = dict(ChunkMetadata())
         if "text" in metadata:
             metadata["text"] = chunk.text
 
@@ -119,7 +127,7 @@ class DocumentProcessor:
         # Process chunks and extract metadata
         logger.info("\nProcessing chunks:")
         processed_chunks = []
-        for i, chunk in enumerate(chunks):
+        for _, chunk in enumerate(chunks):
             metadata = self.extract_chunk_metadata(chunk)
             processed_chunks.append(metadata)
 
@@ -164,7 +172,7 @@ class DocumentProcessor:
                 if headings:
                     context_parts.append(f"Section: {' > '.join(headings)}")
             except Exception as e:
-                pass
+                logger.error(e)
 
             # Add page reference
             if chunk["page"]:
@@ -214,7 +222,7 @@ def main():
     processor.process_document(pdf_path)
 
     # Example query
-    question = "What are the main features of InternLM-XComposer-2.5?"
+    # question = "What are the main features of InternLM-XComposer-2.5?"
     # answer = processor.query(question)
     # logger.info("\nAnswer:")
     # logger.info("=" * 80)
