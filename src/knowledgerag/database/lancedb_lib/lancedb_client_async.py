@@ -8,7 +8,10 @@ from typing import Any
 
 import lancedb
 import more_itertools
-from ecumeragtest.database.clients.lancedb_client.lancedb_common import (
+from ecumeragtest.utils.profilling import async_timeit
+from loguru import logger
+
+from knowledgerag.database.lancedb_lib.lancedb_common import (
     CollectionSettings,
     FtsIndexSettings,
     IndexableElement,
@@ -21,8 +24,6 @@ from ecumeragtest.database.clients.lancedb_client.lancedb_common import (
     VectorIndexSettings,
     pyarrow_schema_creator,
 )
-from ecumeragtest.utils.profilling import async_timeit
-from loguru import logger
 
 
 class AsyncLanceDbDatabase:

@@ -6,7 +6,9 @@ from typing import Any
 
 import lancedb
 import more_itertools
-from ecumeragtest.database.clients.lancedb_client.lancedb_common import (
+from loguru import logger
+
+from knowledgerag.database.lancedb_lib.lancedb_common import (
     Collection,
     CollectionSettings,
     Database,
@@ -24,8 +26,7 @@ from ecumeragtest.database.clients.lancedb_client.lancedb_common import (
     VectorIndexSettings,
     pyarrow_schema_creator,
 )
-from ecumeragtest.utils.profilling import timeit
-from loguru import logger
+from knowledgerag.utils.profilling import timeit
 
 
 class LancedbDatabase(Database):

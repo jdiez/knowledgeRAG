@@ -4,8 +4,9 @@ from pathlib import Path
 from typing import Annotated, Any, Literal, NewType
 
 import pyarrow as pa
-from ecumeragtest.utils.wrangling import data_cleaner
 from pydantic import BaseModel, ConfigDict, Field
+
+from knowledgerag.utils.wrangling import data_cleaner
 
 ComponentConfiguration = NewType("ComponentConfiguration", dict[str, Any])
 IndexableElement = NewType("IndexableElement", dict[str, Any])
