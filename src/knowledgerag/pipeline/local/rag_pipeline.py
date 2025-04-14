@@ -1,11 +1,19 @@
 import json
-from typing import Callable
+from typing import Callable, Literal
 
 from loguru import logger
 
 
 class RAGpipe:
-    def __init__(self, vector_client, llm_client, embedding_function: Callable, prompt: str) -> None:
+    def __init__(
+        self,
+        vector_client,
+        llm_client,
+        processing_function: Callable,
+        embedding_function: Callable | None = None,
+        prompt: str | None = None,
+        query_type: Literal["vector", "fts", "hybrid"] | None = "hybrid",
+    ) -> None:
         """_summary_
 
         Args:
@@ -16,10 +24,11 @@ class RAGpipe:
         """
         self.vector_client = vector_client
         self.llm_client = llm_client
-        self.embedding_function = embedding_function
+        self.processing_function = processing_function
         self.prompt = prompt
+        self.query_type = query_type
 
-    def process_context(self, context: str, processing_function: Callable) -> str:
+    def process_context(self, context: str) -> str:
         """_summary_
 
         Args:
@@ -29,9 +38,9 @@ class RAGpipe:
         Returns:
             str: _description_
         """
-        return processing_function(context)
+        return self.processing_function(context)
 
-    def __call__(self, input_data: str, *args, **kwds) -> str:
+    def __call__(self, query: str, collection_name: str, *args, **kwds) -> str:
         """_summary_
 
         Args:
@@ -40,9 +49,23 @@ class RAGpipe:
         Returns:
             str: _description_
         """
-        context = self.vector_client.query(input_data)  # embeddings and search type.
+        match self.query_type:
+            case "vector":
+                context = self.vector_client.search(
+                    query=query, collection_name=collection_name
+                )  # embeddings and search type.
+            case "hybrid":
+                context = self.vector_client.hybrid_search(
+                    query=query, collection_name=collection_name
+                )  # embeddings and search type.
+            case "fts":
+                context = self.vector_client.search(
+                    query=query, collection_name=collection_name, query_type="fts"
+                )  # embeddings and search type.
+            case _:
+                raise ValueError
         context = self.process_context(context)
-        prompted = self.prompt.format(context)
+        prompted = self.prompt.format(query=query, context=context)
         response = self.llm_client(prompted)  # already formatted output
         return response
 
@@ -68,38 +91,38 @@ def docling_context(chunks: list[dict]) -> str:
 
         # Add page reference
         if chunk["page"]:
-            context_parts.append(f"Page {chunk['page']}:")
+            context_parts.append(f"Page: {chunk['page']}")
 
         # Add the content
-        context_parts.append(chunk["text"])
-        context_parts.append("-" * 40)
-    return "\n".join(context_parts)
+        context_parts.append(f"Text: {chunk["text"]}")
+        context_parts.append("-" * 20)
+
+    doc_context = "\n".join(context_parts)
+    print(doc_context)
+    return doc_context
 
 
 if __name__ == "__main__":
-    import lancedb
-    from lancedb.embeddings import get_registry
-
+    from knowledgerag import read_configuration
+    from knowledgerag.database.lancedb_lib.lancedb_client import LancedbDatabase
+    from knowledgerag.database.lancedb_lib.lancedb_common import LanceDbSettings
     from knowledgerag.genai.llm import GoogleGemini
+    from knowledgerag.genai.prompt.prompt import SIMPLE_RAG_PROMPT
 
-    embedding_function = get_registry().get("sentence-transformers").create(name="all-mpnet-base-v2", device="cpu")
-    vector_store_client = db = lancedb.connect("/home/jdiez/Downloads/scratch/docling_bis.db")
-    embedding_function = embedding_function.generate_embeddings
-    table = db.open_table("example_pdf")
-    # table.create_index(metric="cosine")
-    query = "What disease talks the article about?"
-    context = (
-        table.search(query)
-        .distance_type("cosine")
-        .limit(3)
-        .to_pandas()
-        .sort_values("_distance", ascending=True)
-        .head(3)
-    )
-    print(context)
-    context = docling_context(context.to_dict("records"))
-    print(context)
-    llm_client = GoogleGemini()
-    prompt = f"You are an expert question answering system, I'll give you question and context and you'll return the answer. Query : {query} Contexts : {context}"
-    result = llm_client(prompt)
-    print(result)
+    configuration = read_configuration()
+    pipe = configuration["pipeline"]["default"]
+    db_uri = pipe["storage"]["parameters"]["uri"]
+    collection_name = pipe["storage"]["parameters"]["collection"]
+    client_settings = LanceDbSettings(uri=db_uri)
+    with LancedbDatabase(client_settings) as client:
+        llm = GoogleGemini()
+        query = "What is a Domino container?"
+        rag_pipeline = RAGpipe(
+            vector_client=client,
+            llm_client=llm,
+            prompt=SIMPLE_RAG_PROMPT,
+            processing_function=docling_context,
+            query_type="hybrid",
+        )
+        res = rag_pipeline(query=query, collection_name=collection_name)
+        print(res)

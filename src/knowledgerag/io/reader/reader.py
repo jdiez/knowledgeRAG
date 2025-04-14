@@ -56,7 +56,7 @@ class DirectoryFileIterator:
         Yields:
             Generator: [description]
         """
-        for child in self.source.glob("**/*"):
+        for child in self.source.rglob("*"):
             if child.is_file():
                 suffix = child.suffix.lower()
                 match self.allowed_file_types:
@@ -188,7 +188,7 @@ def main_file_reader(
         allowed_file_types = [".pdf"]
     f = Path(path).resolve()
     result = DirectoryFileIterator(
-        f.parent.parent.parent,
+        f,
         allowed_file_types=allowed_file_types,
         descriptive_function=descriptive_function,
     ).get_files()

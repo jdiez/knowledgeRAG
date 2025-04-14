@@ -16,15 +16,7 @@ QueryDataType = list[list[float]] | list[float] | str | tuple | None
 ScalarIndexType = Literal["BTREE", "BITMAP", "LABEL_LIST"]
 
 
-class ClientConfig(BaseModel):
-    pass
-
-
-class Database:
-    pass
-
-
-class Record:
+class Collection:
     pass
 
 
@@ -96,7 +88,7 @@ class CollectionSettings(BaseModel):
     model_config = ConfigDict(alias_generator=data_cleaner)
 
     name: str
-    schema_: Annotated[Any, Field(alias="schema", default=None)]
+    schema: Annotated[Any, Field(alias="schema", default=None)]
     data: list[IndexableElement] | None
     mode: Literal["create", "overwrite"] | None = None
     exist_ok: bool | None = False
@@ -287,7 +279,7 @@ class LanceDbSettings(BaseModel):
         ),
     ]
     client_config: Annotated[
-        ClientConfig | dict[str, Any] | None,
+        dict[str, Any] | None,
         Field(
             default=None,
             description="Configuration options for the LanceDB Cloud HTTP client. If a dict, then the keys are the attributes of the ClientConfig class. If None, then the default configuration is used.",

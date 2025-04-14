@@ -1,24 +1,73 @@
 llms:
-  - name: AzureOpenAI
-    credentials:
-      api_key: x
-      azure_aoi_endpoint: x
-      azure_aoi_key: x
-      model_version: x
-      deployment: x
-    args:
-
+  azure_openai:
+    name: AzureOpenAI
+    credential_variables:
+      api_key: null
+      azure_aoi_endpoint: null
+      azure_aoi_key: null
+      model_version: null
+      deployment: null
+  google_gemini:
+    name: Gemini
+    credential_variables:
+      api_key: null
+      model_version: null
+  ollama:
+    name: ollama
+    credential_variables:
+      url: null
+      version: null
 database:
-  - name: Lancedb
-    path: x
-    database_name: x
-    table_name: x
+  lancedb:
+    name: Lancedb
+    description: x
+    parameters:
+      uri: x
+      table: x
+      schema: x
+      mode: x
+  chromadb:
+    name: Chormadb
+    description: x
+    parameters:
+      uri: x
+      database: x
+      table: x
+  milvus:
+    name: Milvus
+    description: x
+    parameters:
+      uri: x
+      database: x
+      table: x
 pipeline:
-  - name:
-    allowed_file_types:
-      - x
-      - y
-      - z
-    embedding: x
-    tokenizer: x
-    chunker: x
+  default:
+    name:
+    description:
+    input:
+      directory:
+      extensions:
+        - .pdf
+        - .doc
+        - .docx
+        - .ppt
+        - .pptx
+        - .txt
+        - .md
+        - .html
+    processing:
+      tokenizer: jinaai/jina-embeddings-v3
+      chunker: HybridChunker
+      embedding: sentence-transformers/all-mpnet-base-v2
+      device: cpu
+    storage:
+      vectorbase: lancedb
+      parameters:
+        uri: /home/jdiez/Downloads/scratch/docling_domino.db
+        collection: example_pdf
+        schema: x
+        mode: append
+    llms:
+      name: azure_open_ai
+    prompt:
+      name: prompt_choice

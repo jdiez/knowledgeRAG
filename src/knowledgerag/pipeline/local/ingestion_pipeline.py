@@ -1,9 +1,9 @@
 import json
 import logging
+from functools import partial
 from pathlib import Path
 from typing import Any, Callable
 
-import lancedb
 from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
 from docling.datamodel.base_models import InputFormat
 from docling.datamodel.pipeline_options import (
@@ -19,18 +19,10 @@ from lancedb.embeddings import get_registry
 from lancedb.pydantic import LanceModel, Vector
 from loguru import logger
 from pydantic import BaseModel
-from sentence_transformers import SentenceTransformer
 
-embedder = get_registry().get("sentence-transformers").create(name="all-mpnet-base-v2", device="cpu")
-# check instructor embeddings: https://lancedb.github.io/lancedb/embeddings/available_embedding_models/text_embedding_functions/instructor_embedding/
-
-
-class DbTableHybrid(LanceModel):
-    text: str = embedder.SourceField()
-    vector: Vector(embedder.ndims()) = embedder.VectorField()
-    headings: str
-    page: str
-    content_type: str
+from knowledgerag import read_configuration
+from knowledgerag.database.lancedb_lib.lancedb_client import LancedbDatabase
+from knowledgerag.database.lancedb_lib.lancedb_common import CollectionSettings, LanceDbSettings
 
 
 class ChunkMetadata(BaseModel):
@@ -43,21 +35,19 @@ class ChunkMetadata(BaseModel):
 class DocumentProcessor:
     def __init__(
         self,
-        tokenizer: str = "jinaai/jina-embeddings-v3",
-        embedding_model: str = "sentence-transformers/all-mpnet-base-v2",  # BAAI/bge-m3
-        db_uri: str = "/home/jdiez/Downloads/scratch/docling.db",
-        db_table_name: str = "document_chunks",
+        tokenizer: str,
+        embedding_model: str,
+        device: str,
+        db_uri: str,
+        db_table_name: str,
     ) -> None:
         """Initialize document processor with necessary components"""
-        # self.api_key = os.getenv("WATSONX_API_KEY", None)
-        # self.project_id = os.getenv("WATSONX_PROJECT_ID", None)
         self.tokenizer = tokenizer
         self.embedding_model = embedding_model
+        self.device = device
         self.db_uri = db_uri
         self.db_table_name = db_table_name
-        self.db = lancedb.connect(self.db_uri)
         self.setup_document_converter()
-        self.setup_ml_components()
 
     def setup_document_converter(self):
         """Configure document converter with advanced processing capabilities"""
@@ -79,7 +69,7 @@ class DocumentProcessor:
                 InputFormat.ASCIIDOC,
                 InputFormat.CSV,
                 InputFormat.MD,
-            ],  # whitelist formats, non-matching files are ignored.
+            ],  # whitelist formats, from non-matching files are ignored.
             format_options={
                 InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options, backend=PyPdfiumDocumentBackend),
                 InputFormat.DOCX: WordFormatOption(
@@ -90,13 +80,15 @@ class DocumentProcessor:
 
     def setup_ml_components(self):
         """Initialize embedding model and LLM"""
-        self.embed_model = SentenceTransformer(self.embedding_model)
+        provider, model = self.embedding_model.split("/")
+        self.embed_model = get_registry().get(provider).create(name=model, device=self.device)
+        # self.embed_model = SentenceTransformer()
 
     def extract_chunk_metadata(self, chunk, metadata: BaseModel = ChunkMetadata) -> dict[str, Any]:
         """Extract essential metadata from a chunk"""
         metadata = dict(metadata())
         if "text" in metadata:
-            metadata["text"] = chunk.text
+            metadata["text"] = chunk.meta.text
 
         if hasattr(chunk, "meta"):
             # Extract headings
@@ -117,7 +109,7 @@ class DocumentProcessor:
         return metadata
 
     def process_document(self, pdf_path: str) -> Any:
-        """Process document and create searchable index with metadata"""
+        """Process document and creatfrom e searchable index with metadata"""
         logger.info(f"Processing document: {pdf_path}")
 
         # Convert document
@@ -131,10 +123,11 @@ class DocumentProcessor:
             metadata = self.extract_chunk_metadata(chunk)
             # embeddings = self.embed_model.encode(metadata["text"])
             data_item = {
-                # "vector": embeddings,
+                # "vector": self.embedding_model.encode(metadata['text']),
+                "file_name": str(pdf_path),
                 "text": metadata["text"],
                 "headings": json.dumps(metadata["headings"]),
-                "page": metadata["page_info"],
+                "page": metadata["pagfrom e_info"],
                 "content_type": metadata["content_type"],
             }
             yield data_item
@@ -161,40 +154,13 @@ class DocumentProcessor:
 
         return "\n".join(context_parts)
 
-    def query(self, question: str, k: int = 5) -> str:
-        """Query the document using semantic search and generate an answer"""
-        # Create query embedding and search
-        query_embedding = self.embed_model.encode(question)
-        results = self.index.search(query_embedding).limit(k)
-        chunks = results.to_pandas()
-
-        # Display retrieved chunks with their context
-        logger.info(f"\nRelevant chunks for query: '{question}'")
-        logger.info("=" * 80)
-
-        # Format chunks for display and LLM
-        context = self.format_context(chunks.to_dict("records"))
-        logger.info(context)
-
-        # Generate answer using structured context
-        prompt = f"""Based on the following excerpts from a document:
-
-                    {context}
-
-                    Please answer this question: {question}
-
-                    Make use of the section information and page numbers in your answer when relevant.
-                    """
-
-        return self.llm(prompt)
-
 
 def basic_lancedb_ingestion_pipeline(
     documents: list[Path | str] | Path | str,
     processor: Callable,
     db_path: Path | str,
     table_name: str,
-    schema: LanceModel,
+    schema: Any,
 ) -> None:
     """_summary_
 
@@ -206,29 +172,67 @@ def basic_lancedb_ingestion_pipeline(
         schema (LanceModel): _description_
     """
     data = list(processor.process_document(documents))
-    conn = lancedb.connect(db_path)
-    conn.create_table(table_name, data=data, schema=schema)
+    collection_settings = CollectionSettings(name=table_name, schema=schema, data=data, mode="create")
+    with LancedbDatabase(LanceDbSettings(uri=db_path)) as client:
+        if table_name not in client.list_collections():
+            client.create_collection(collection_settings)
+        else:
+            client.add_records(collection_name=table_name, data=data)
 
 
-def main():
+def set_up(pipe: dict[str, Any]):
     logging.basicConfig(level=logging.INFO)
+    embedding_model = pipe["processing"]["embedding"]
+    device = pipe["processing"]["device"]
+    tokenizer = pipe["processing"]["tokenizer"]
+    db_uri = pipe["storage"]["parameters"]["uri"]
+    db_table_name = pipe["storage"]["parameters"]["collection"]
 
-    processor = DocumentProcessor()
-    pdf_path = "/home/jdiez/Downloads/jamaneurology_johnson_2021_oi_210047_1633018740.39649.pdf"
-    db = "/home/jdiez/Downloads/scratch/docling_bis.db"
-    table = "example_pdf"
-    schema = DbTableHybrid
-    basic_lancedb_ingestion_pipeline(
-        documents=pdf_path, processor=processor, db_path=db, table_name=table, schema=schema
+    provider, model = embedding_model.split("/")
+    embedder = get_registry().get(provider).create(name=model, device=device)
+
+    class DbTableHybrid(LanceModel):
+        file_name: str
+        text: str = embedder.SourceField()
+        vector: Vector(embedder.ndims()) = embedder.VectorField()
+        headings: str
+        page: str
+        content_type: str
+
+    processor = DocumentProcessor(
+        tokenizer=tokenizer,
+        embedding_model=embedding_model,
+        device=device,
+        db_uri=db_uri,
+        db_table_name=db_table_name,
     )
 
-    # Example query
-    # question = "What are the main features of InternLM-XComposer-2.5?"
-    # answer = processor.query(question)
-    # logger.info("\nAnswer:")
-    # logger.info("=" * 80)
-    # logger.info(answer)
+    pf = partial(
+        basic_lancedb_ingestion_pipeline,
+        processor=processor,
+        db_path=db_uri,
+        table_name=db_table_name,
+        schema=DbTableHybrid,
+    )
+
+    return pf
 
 
 if __name__ == "__main__":
-    main()
+    configuration = read_configuration()
+    pipe = configuration["pipeline"]["default"]
+    pf = set_up(pipe=pipe)
+    # from knowledgerag.io.reader.reader import main_file_reader
+    # from rich import print_json
+    # filetypes = pipe['input']['extensions']
+    # print(filetypes)
+    # root_path = Path("/home/jdiez/Downloads/test").resolve()
+    # for i in list(main_file_reader(root_path, allowed_file_types=filetypes)):
+    #     print_json(i.model_dump_json())
+    for pdf_path in list(Path("/home/jdiez/Downloads/docs/").glob("*.pdf")):
+        print(pf(documents=pdf_path))
+    # generate index after ingestion.
+    # with LancedbDatabase(LanceDbSettings(uri=db_path)) as client:
+    #     table = client.client.open_table(pipe['storage']['parameters']['collection'])
+    #     table.create_index('cosine')
+    #     table.create_fts_index("text", use_tantivy=False)

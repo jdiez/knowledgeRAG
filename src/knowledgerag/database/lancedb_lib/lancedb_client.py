@@ -2,16 +2,16 @@ import random
 from collections.abc import Generator, Iterable
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import lancedb
 import more_itertools
+from lancedb.rerankers import LinearCombinationReranker
 from loguru import logger
 
 from knowledgerag.database.lancedb_lib.lancedb_common import (
     Collection,
     CollectionSettings,
-    Database,
     DistanceMetric,
     FtsIndexSettings,
     IndexableElement,
@@ -19,7 +19,6 @@ from knowledgerag.database.lancedb_lib.lancedb_common import (
     LanceDbSettings,
     QueryBuilderModel,
     QueryType,
-    Record,
     RecordBatchSettings,
     Result,
     ScalarIndexSettings,
@@ -29,7 +28,7 @@ from knowledgerag.database.lancedb_lib.lancedb_common import (
 from knowledgerag.utils.profilling import timeit
 
 
-class LancedbDatabase(Database):
+class LancedbDatabase:
     """Lancedb custom client."""
 
     @classmethod
@@ -48,7 +47,7 @@ class LancedbDatabase(Database):
             case _:
                 raise ValueError
 
-    def __init__(self, settings: LanceDbSettings) -> None:
+    def __init__(self, settings: LanceDbSettings, reranker: Callable | None = LinearCombinationReranker) -> None:
         """Initializes LanceDbDatabase instance.
 
         Args:
@@ -56,6 +55,7 @@ class LancedbDatabase(Database):
         """
         self.settings = settings
         self.uri = self.settings.uri
+        self.reranker = reranker()
 
     def __enter__(self) -> "LancedbDatabase":
         """AI is creating summary for __enter__
@@ -87,10 +87,10 @@ class LancedbDatabase(Database):
         return client
 
     def _get_config(self) -> dict[str, Any]:
-        """AI is creating summary for _get_config
+        """_summary_
 
         Returns:
-            dict[str, Any]: [description]
+            dict[str, Any]: _description_
         """
         return self.settings.model_dump()
 
@@ -137,6 +137,49 @@ class LancedbDatabase(Database):
         """
         table = self.client.open_table(collection_name)
         table.drop_index(name=index_name)
+
+    def search(self, query: str, collection_name: str, k: int = 6, query_type: str = "hybrid") -> list[dict[str, Any]]:
+        """Simplified version of table search.
+
+        Args:
+            query (str): _description_
+            collection_name (str): _description_
+            k (int, optional): _description_. Defaults to 3.
+            sort_column (str, optional): _description_. Defaults to '_distance'.
+
+        Returns:
+            list[dict[str, Any]]: _description_
+        """
+        table = self.client.open_table(collection_name)
+        result = (
+            table.search(query, query_type=query_type)
+            .rerank(reranker=self.reranker)
+            .limit(k)
+            .to_pandas()
+            .to_dict(orient="records")
+        )
+        return result
+
+    def hybrid_search(self, query: str, collection_name: str, k: int = 6) -> list[dict[str, Any]]:
+        """_summary_
+
+        Args:
+            query (str): _description_
+            collection_name (str): _description_
+            k (int, optional): _description_. Defaults to 3.
+
+        Returns:
+            list[dic[str, Any]]: _description_
+        """
+        table = self.client.open_table(collection_name)
+        result = (
+            table.search(query, query_type="hybrid")
+            .rerank(reranker=self.reranker)
+            .limit(k)
+            .to_pandas()
+            .to_dict(orient="records")
+        )
+        return result
 
     def query(self, collection_name: str, query: QueryBuilderModel) -> Result:
         """It performs a database query on a given collection using a set of query parameters.
@@ -208,10 +251,9 @@ class LancedbDatabase(Database):
     def retrieve_records(self, collection_name: str) -> Iterable:
         """ """
         table = self.get_collection(collection_name)
-        for record in table.query().to_list():
-            yield Record(record)
+        yield from table.query().to_list()
 
-    def sample(self, collection_name: str, size: int = 10) -> list[Record]:
+    def sample(self, collection_name: str, size: int = 10) -> list[dict[str, Any]]:
         """Returns a random sample for the collection.
 
         Args:
@@ -219,7 +261,7 @@ class LancedbDatabase(Database):
             size (int, optional): [description]. Defaults to 10.
 
         Returns:
-            list[Record]: [description]
+            list[dic[str, Any]]: [description]
         """
         n_records = self.count(collection_name=collection_name)
         index = random.sample(range(0, n_records), size)
@@ -348,6 +390,19 @@ class LancedbDatabase(Database):
         """
         table = self.client.open_table(collection_name)
         table.add(**record_batch.model_dump())
+
+    def add_records(self, collection_name: str, data: list[str, Any]) -> None:
+        """_summary_
+
+        Args:
+            collection_name (str): _description_
+            data (list[str, Any]): _description_
+        """
+        try:
+            table = self.client.open_table(collection_name)
+            table.add(data)
+        except Exception as e:
+            logger.error(e)
 
     def delete_records(self, collection_name: str, query: str | list[int]) -> None:
         """AI is creating summary for delete_records
