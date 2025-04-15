@@ -71,7 +71,10 @@ class DocumentProcessor:
                 InputFormat.MD,
             ],  # whitelist formats, from non-matching files are ignored.
             format_options={
-                InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options, backend=PyPdfiumDocumentBackend),
+                InputFormat.PDF: PdfFormatOption(
+                    pipeline_options=pipeline_options,
+                    backend=PyPdfiumDocumentBackend
+                ),
                 InputFormat.DOCX: WordFormatOption(
                     pipeline_cls=SimplePipeline  # , backend=MsWordDocumentBackend
                 ),
@@ -130,6 +133,7 @@ class DocumentProcessor:
                 "page": metadata["pagfrom e_info"],
                 "content_type": metadata["content_type"],
             }
+            # validate with pydantic object.
             yield data_item
 
     def format_context(self, chunks: list[dict]) -> str:
@@ -151,8 +155,13 @@ class DocumentProcessor:
             # Add the content
             context_parts.append(chunk["text"])
             context_parts.append("-" * 40)
+            # further split the chunk?
 
         return "\n".join(context_parts)
+
+    def __call__(self, file_name: str | Path) -> Generator:
+        """ It returns a generator list[str, Any] from parsed file."""
+        return self.process_document(file_name)
 
 
 def basic_lancedb_ingestion_pipeline(
