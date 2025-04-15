@@ -36,6 +36,7 @@ class DocumentProcessor:
     def __init__(
         self,
         tokenizer: str,
+        # chunker: Callable,
         embedding_model: str,
         device: str,
         db_uri: str,
@@ -43,6 +44,7 @@ class DocumentProcessor:
     ) -> None:
         """Initialize document processor with necessary components"""
         self.tokenizer = tokenizer
+        # self.chunker = chunker
         self.embedding_model = embedding_model
         self.device = device
         self.db_uri = db_uri
@@ -114,27 +116,26 @@ class DocumentProcessor:
     def process_document(self, pdf_path: str) -> Any:
         """Process document and creatfrom e searchable index with metadata"""
         logger.info(f"Processing document: {pdf_path}")
-
         # Convert document
         result = self.converter.convert(pdf_path)
         doc = result.document
-
         # Create chunks using hybrid chunker
         chunker = HybridChunker(tokenizer=self.tokenizer)
+        # chunker = self.chunker(tokenizer=self.tokenizer)
         chunks = list(chunker.chunk(doc))
         for _, chunk in enumerate(chunks):
             metadata = self.extract_chunk_metadata(chunk)
             # embeddings = self.embed_model.encode(metadata["text"])
-            data_item = {
+            data_item = ChunkMetadata(
                 # "vector": self.embedding_model.encode(metadata['text']),
-                "file_name": str(pdf_path),
-                "text": metadata["text"],
-                "headings": json.dumps(metadata["headings"]),
-                "page": metadata["pagfrom e_info"],
-                "content_type": metadata["content_type"],
-            }
+                file_name = str(pdf_path),
+                text = metadata["text"],
+                headings = json.dumps(metadata["headings"]),
+                page = metadata["page_info"],
+                content_type = metadata["content_type"],
+            )
             # validate with pydantic object.
-            yield data_item
+            yield data_item.model_dump()
 
     def format_context(self, chunks: list[dict]) -> str:
         """Format retrieved chunks into a structured context for the LLM"""
