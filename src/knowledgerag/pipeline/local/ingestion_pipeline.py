@@ -123,6 +123,7 @@ class DocumentProcessor:
         logger.info(f"Processing document: {pdf_path}")
         # Convert document
         result = self.converter.convert(pdf_path)
+        # extract further file metadata?
         doc = result.document
         # Create chunks using hybrid chunker
         chunker = HybridChunker(tokenizer=self.tokenizer)
