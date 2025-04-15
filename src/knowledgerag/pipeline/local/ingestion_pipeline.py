@@ -85,9 +85,14 @@ class DocumentProcessor:
 
     def setup_ml_components(self):
         """Initialize embedding model and LLM"""
-        provider, model = self.embedding_model.split("/")
-        self.embed_model = get_registry().get(provider).create(name=model, device=self.device)
-        # self.embed_model = SentenceTransformer()
+        if isinstance(self.embedding_model, str):
+            provider, model = self.embedding_model.split("/")
+            self.embed_model = get_registry().get(provider).create(name=model, device=self.device)
+            # self.embed_model = SentenceTransformer()  
+        elif isinstance(self.embedding_model, Callable):
+            self.embed_model = self.embedding_model
+        else:
+            raise ValueError()
 
     def extract_chunk_metadata(self, chunk, metadata: BaseModel = ChunkMetadata) -> dict[str, Any]:
         """Extract essential metadata from a chunk"""
