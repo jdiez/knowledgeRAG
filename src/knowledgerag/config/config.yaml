@@ -63,7 +63,7 @@ pipeline:
     storage:
       vectorbase: lancedb
       parameters:
-        uri: /home/jdiez/Downloads/scratch/docling_domino.db
+        uri: /home/jdiez/Downloads/scratch/docling_mini.db
         collection: example_pdf
         schema: x
         mode: append

@@ -35,11 +35,11 @@ class LancedbDatabase:
     def new(cls, database_settings: LanceDbSettings) -> "LancedbDatabase":
         """Returns a new instance of LanceDbDatabase.
 
-        Raises:
-            ValueError: [description]
-
-        Returns:
-            [type]: [description]
+                Raises:
+                    ValueError: [description]
+        path: str
+                Returns:
+                    [type]: [description]
         """
         match database_settings:
             case LanceDbSettings():

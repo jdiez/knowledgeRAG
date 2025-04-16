@@ -89,7 +89,7 @@ class CollectionSettings(BaseModel):
 
     name: str
     schema: Annotated[Any, Field(alias="schema", default=None)]
-    data: list[IndexableElement] | None
+    data: list[IndexableElement] | None = None
     mode: Literal["create", "overwrite"] | None = None
     exist_ok: bool | None = False
     on_bad_vectors: str | None = "error"

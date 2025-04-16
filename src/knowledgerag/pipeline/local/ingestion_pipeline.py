@@ -1,5 +1,6 @@
 import json
 import logging
+from collections.abc import Generator
 from functools import partial
 from pathlib import Path
 from typing import Any, Callable
@@ -26,8 +27,10 @@ from knowledgerag.database.lancedb_lib.lancedb_common import CollectionSettings,
 
 
 class ChunkMetadata(BaseModel):
+    path: str | None = ""
+    file_name: str | None = ""
     text: str | None = ""
-    headings: list[str] | None = []
+    headings: str = ""
     page_info: int | None = None
     content_type: str | None = None
 
@@ -36,19 +39,19 @@ class DocumentProcessor:
     def __init__(
         self,
         tokenizer: str,
-        # chunker: Callable,
-        embedding_model: str,
-        device: str,
-        db_uri: str,
-        db_table_name: str,
+        chunker: Callable | None = HybridChunker,
+        embedding_model: str | None = None,
+        device: str | None = "cpu",
+        # db_uri: str,
+        # db_table_name: str,
     ) -> None:
         """Initialize document processor with necessary components"""
         self.tokenizer = tokenizer
-        # self.chunker = chunker
+        self.chunker = chunker
         self.embedding_model = embedding_model
         self.device = device
-        self.db_uri = db_uri
-        self.db_table_name = db_table_name
+        # self.db_uri = db_uri
+        # self.db_table_name = db_table_name
         self.setup_document_converter()
 
     def setup_document_converter(self):
@@ -73,10 +76,7 @@ class DocumentProcessor:
                 InputFormat.MD,
             ],  # whitelist formats, from non-matching files are ignored.
             format_options={
-                InputFormat.PDF: PdfFormatOption(
-                    pipeline_options=pipeline_options,
-                    backend=PyPdfiumDocumentBackend
-                ),
+                InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options, backend=PyPdfiumDocumentBackend),
                 InputFormat.DOCX: WordFormatOption(
                     pipeline_cls=SimplePipeline  # , backend=MsWordDocumentBackend
                 ),
@@ -88,17 +88,17 @@ class DocumentProcessor:
         if isinstance(self.embedding_model, str):
             provider, model = self.embedding_model.split("/")
             self.embed_model = get_registry().get(provider).create(name=model, device=self.device)
-            # self.embed_model = SentenceTransformer()  
+            # self.embed_model = SentenceTransformer()
         elif isinstance(self.embedding_model, Callable):
             self.embed_model = self.embedding_model
         else:
-            raise ValueError()
+            raise TypeError()
 
     def extract_chunk_metadata(self, chunk, metadata: BaseModel = ChunkMetadata) -> dict[str, Any]:
         """Extract essential metadata from a chunk"""
         metadata = dict(metadata())
         if "text" in metadata:
-            metadata["text"] = chunk.meta.text
+            metadata["text"] = chunk.text
 
         if hasattr(chunk, "meta"):
             # Extract headings
@@ -126,7 +126,7 @@ class DocumentProcessor:
         # extract further file metadata?
         doc = result.document
         # Create chunks using hybrid chunker
-        chunker = HybridChunker(tokenizer=self.tokenizer)
+        chunker = self.chunker(tokenizer=self.tokenizer)
         # chunker = self.chunker(tokenizer=self.tokenizer)
         chunks = list(chunker.chunk(doc))
         for _, chunk in enumerate(chunks):
@@ -134,11 +134,12 @@ class DocumentProcessor:
             # embeddings = self.embed_model.encode(metadata["text"])
             data_item = ChunkMetadata(
                 # "vector": self.embedding_model.encode(metadata['text']),
-                file_name = str(pdf_path),
-                text = metadata["text"],
-                headings = json.dumps(metadata["headings"]),
-                page = metadata["page_info"],
-                content_type = metadata["content_type"],
+                file_name=Path(pdf_path).name,
+                path=pdf_path,
+                text=metadata["text"],
+                headings=json.dumps(metadata["headings"]),
+                page=metadata["page_info"],
+                content_type=metadata["content_type"],
             )
             # validate with pydantic object.
             yield data_item.model_dump()
@@ -167,7 +168,7 @@ class DocumentProcessor:
         return "\n".join(context_parts)
 
     def __call__(self, file_name: str | Path) -> Generator:
-        """ It returns a generator list[str, Any] from parsed file."""
+        """It returns a generator list[str, Any] from parsed file."""
         return self.process_document(file_name)
 
 

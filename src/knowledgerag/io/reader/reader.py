@@ -33,10 +33,16 @@ class DirectoryFileIterator:
             allowed_file_types (list[str], optional): [description]. Defaults to None.
         """
         self.source = Path(source).resolve()
+        self.__check_root()
         self.allowed_file_types = (
             [i.lower() for i in allowed_file_types] if allowed_file_types is not None else allowed_file_types
         )
         self.descriptive_function = descriptive_function
+
+    def __check_root(self) -> None:
+        """_summary_"""
+        if self.source.is_file():
+            self.source = self.source.parent
 
     def get_file_struct(self, filename: Path) -> FileDescription:
         """Get file description data structure.
@@ -115,7 +121,7 @@ def sizeFormat(size: int) -> str:
 
 
 def calculate_checksum_info(filepath: str | Path) -> str:
-    """Calculate file information.
+    """Calculate file information._summary_
 
     Args:
         filepath (str): [description]
@@ -173,7 +179,7 @@ def reporting_file_info(filepath: str | Path, hashing_function: Callable = calcu
     return result
 
 
-def main_file_reader(
+def file_reader(
     path: str | Path, allowed_file_types: list[str] | None = None, descriptive_function: Callable = reporting_file_info
 ) -> Generator[FileDescription, None, None]:
     """AI is creating summary for main
@@ -185,7 +191,7 @@ def main_file_reader(
         FileDescription: [description]
     """
     if allowed_file_types is None:
-        allowed_file_types = [".pdf"]
+        allowed_file_types = [".pdf", ".py"]
     f = Path(path).resolve()
     result = DirectoryFileIterator(
         f,
@@ -202,6 +208,6 @@ if __name__ == "__main__":
     from rich import print_json
 
     root_path = Path(__file__).resolve()
-    result = main_file_reader(root_path)
+    result = file_reader(root_path)
     for file_rep in result:
         print_json(file_rep.model_dump_json())
