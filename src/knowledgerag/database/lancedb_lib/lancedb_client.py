@@ -56,6 +56,7 @@ class LancedbDatabase:
         self.settings = settings
         self.uri = self.settings.uri
         self.reranker = reranker()
+        self.client = self.__create_client()
 
     def __enter__(self) -> "LancedbDatabase":
         """AI is creating summary for __enter__
@@ -63,7 +64,6 @@ class LancedbDatabase:
         Returns:
             [type]: [description]
         """
-        self.client = self.__create_client()
         logger.info("Entering LanceDB.")
         return self
 
