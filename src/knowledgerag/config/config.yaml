@@ -63,9 +63,10 @@ pipeline:
     storage:
       vectorbase: lancedb
       parameters:
-        uri: /home/jdiez/Downloads/scratch/docling_domino.db
-        collection: example_pdf
-        schema: x
+        uri: /home/jdiez/Downloads/scratch/docling_domino_pandas.db
+        collection: data
+        metadata: metadata
+        schema: null
         mode: append
     llms:
       name: azure_open_ai

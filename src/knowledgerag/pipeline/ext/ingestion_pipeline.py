@@ -4,6 +4,8 @@ import time
 from typing import Any
 
 import lancedb
+
+# import lancedb
 from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
 from docling.datamodel.base_models import InputFormat
 from docling.datamodel.pipeline_options import (
@@ -210,6 +212,9 @@ class DocumentProcessor:
                     """
 
         return self.llm(prompt)
+
+    def __call__(self, document: str) -> Any:
+        return self.process_document(document)
 
 
 def main():

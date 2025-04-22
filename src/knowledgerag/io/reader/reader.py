@@ -9,6 +9,17 @@ from loguru import logger
 from knowledgerag.models.file import FileDescription  # Adjust the import path as per the actual module structure
 
 
+class PathError(Exception):
+    """Exception raised for custom error in the application."""
+
+    def __init__(self, path: str):
+        super().__init__()
+        self.path = path
+
+    def __str__(self):
+        return f"{self.path} is not valid."
+
+
 class DirectoryFileIterator:
     """Iterate over a folder tree and get files by extension.
     It is used to create a file description data structure.
@@ -22,7 +33,8 @@ class DirectoryFileIterator:
                 Path,
             ],
             FileDescription,
-        ],
+        ]
+        | None = None,
         allowed_file_types: list[str] | None = None,
     ) -> None:
         """Iterates over a folder tree and get files by extension.
@@ -37,12 +49,15 @@ class DirectoryFileIterator:
         self.allowed_file_types = (
             [i.lower() for i in allowed_file_types] if allowed_file_types is not None else allowed_file_types
         )
-        self.descriptive_function = descriptive_function
+        # If not descriptive function it returns file path.
+        self.descriptive_function = descriptive_function if descriptive_function else lambda x: x
 
     def __check_root(self) -> None:
         """_summary_"""
         if self.source.is_file():
             self.source = self.source.parent
+        if not self.source.exists():
+            raise PathError(self.source)
 
     def get_file_struct(self, filename: Path) -> FileDescription:
         """Get file description data structure.
@@ -180,7 +195,7 @@ def reporting_file_info(filepath: str | Path, hashing_function: Callable = calcu
 
 
 def file_reader(
-    path: str | Path, allowed_file_types: list[str] | None = None, descriptive_function: Callable = reporting_file_info
+    path: str | Path, allowed_file_types: list[str] | None = None, descriptive_function: Callable | None = None
 ) -> Generator[FileDescription, None, None]:
     """AI is creating summary for main
 
