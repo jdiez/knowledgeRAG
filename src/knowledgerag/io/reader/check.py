@@ -6,16 +6,15 @@ from typing import Any, Callable
 import click
 import lancedb
 import pandas as pd
-from lancedb.embeddings import get_registry
-from lancedb.pydantic import LanceModel, Vector
 from loguru import logger
 from tqdm.asyncio import tqdm_asyncio
 
 from knowledgerag import read_configuration
 from knowledgerag.database.lancedb_lib.lancedb_client import LancedbDatabase
-from knowledgerag.database.lancedb_lib.lancedb_common import CollectionSettings, LanceDbSettings
+from knowledgerag.database.lancedb_lib.lancedb_common import LanceDbSettings
 from knowledgerag.io.reader.reader import file_reader, reporting_file_info
 from knowledgerag.pipeline.local.ingestion_pipeline import DocumentProcessor
+from knowledgerag.splitting.late_chunking import LateChunking
 
 
 class RAGmetadataLance:
@@ -135,7 +134,7 @@ def ingestion(
     documents: list[dict],
     db_path: Path | str,
     table_name: str,
-    schema: Any,
+    schema: Any | None = None,
 ) -> None:
     """_summary_
 
@@ -145,12 +144,17 @@ def ingestion(
         table_name (str): _description_
         schema (LanceModel): _description_
     """
-    client = LancedbDatabase(LanceDbSettings(uri=db_path))
-    if table_name not in client.list_collections():
-        collection_settings = CollectionSettings(name=table_name, schema=schema, data=documents, mode="create")
-        client.create_collection(collection_settings)
+    # client = LancedbDatabase(LanceDbSettings(uri=db_path))
+    conn = lancedb.connect(db_path)
+    # if table_name not in client.list_collections():
+    if table_name not in conn.table_names():
+        # collection_settings = CollectionSettings(name=table_name, data=documents, mode="create")
+        # client.create_collection(collection_settings)
+        table = conn.create_table(name=table_name, data=documents)
     else:
-        client.add_records(collection_name=table_name, data=documents)
+        # client.add_records(collection_name=table_name, data=documents)
+        table = conn.open_table(table_name)
+        table.add(documents)
 
 
 def index_collection(db_path: str, table_name: str) -> None:
@@ -195,30 +199,44 @@ def lancedb_standard_pipeline(filenames):
         tokenizer=tokenizer,
     )
 
-    embedding_model = pipe["processing"]["embedding"]
+    # embedding_model = pipe["processing"]["embedding"]
     db_uri = pipe["storage"]["parameters"]["uri"]
     db_table_name = pipe["storage"]["parameters"]["collection"]
-    device = pipe["processing"]["device"]
+    # device = pipe["processing"]["device"]
 
-    provider, model = embedding_model.split("/")
-    embedder = get_registry().get(provider).create(name=model, device=device)
+    # provider, model = embedding_model.split("/")
+    # embedder = get_registry().get(provider).create(name=model, device=device)
 
-    class DbTableHybrid(LanceModel):
-        file_name: str
-        path: str
-        text: str = embedder.SourceField()
-        vector: Vector(embedder.ndims()) = embedder.VectorField()
-        headings: str
-        page_info: str
-        content_type: str
+    # class DbTableHybrid(LanceModel):
+    #     file_name: str
+    #     path: str
+    #     text: str = embedder.SourceField()
+    #     vector: Vector(embedder.ndims()) = embedder.VectorField()
+    #     headings: str
+    #     page_info: str
+    #     content_type: str
 
     # docling isn't threath safe, and has some parallel processing, so performed sequentially.
     total = len(filenames)
+    lt = LateChunking()
     for n, filename in enumerate(filenames):
-        logger.info(f"Processing file {n} of {total}: {filename}.")
+        logger.info(f"Processing file {n + 1} of {total}: {filename}.")
         data = processor(filename)
+        # processor returns data splitted by document section.
+        processed_data = []
+        for record in data:
+            section = record["text"]
+            results = lt(section)
+            for result in results:
+                result["file_name"] = record["file_name"]
+                result["path"] = record["path"]
+                result["headings"] = record["headings"]
+                result["page_info"] = record["page_info"]
+                result["content_type"] = record["content_type"]
+                processed_data.append(result)
         logger.info(f"Ingesting file: {filename}")
-        ingestion(documents=list(data), db_path=db_uri, table_name=db_table_name, schema=DbTableHybrid)
+        # ingestion(documents=list(data), db_path=db_uri, table_name=db_table_name, schema=DbTableHybrid)
+        ingestion(documents=processed_data, db_path=db_uri, table_name=db_table_name)
     logger.info(f"Indexing collection: {db_table_name}")
     index_collection(db_path=db_uri, table_name=db_table_name)
 
@@ -229,7 +247,9 @@ def main(data_dir: str) -> None:
     configuration = read_configuration()
     pipe = configuration["pipeline"]["default"]
     db = pipe["storage"]["parameters"]["uri"]
+    print(db)
     meta = pipe["storage"]["parameters"]["metadata"]
+    print(meta)
     rp = RAGmetadataLance(target_database=db, metadata_table=meta)
     res = rp(input_directory=data_dir, ingestion=True)
     filenames = res.path.tolist()

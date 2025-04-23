@@ -56,14 +56,15 @@ pipeline:
         - .md
         - .html
     processing:
-      tokenizer: jinaai/jina-embeddings-v3
+      # tokenizer: jinaai/jina-embeddings-v3
+      tokenizer: jinaai/jina-colbert-v2
       chunker: HybridChunker
       embedding: sentence-transformers/all-mpnet-base-v2
       device: cpu
     storage:
       vectorbase: lancedb
       parameters:
-        uri: /home/jdiez/Downloads/scratch/docling_domino_pandas.db
+        uri: /home/jdiez/Downloads/scratch/docling_domino_pandas_late.db
         collection: data
         metadata: metadata
         schema: null
