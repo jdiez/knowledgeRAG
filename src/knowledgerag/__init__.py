@@ -1,9 +1,11 @@
 # process configuration
+import warnings
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+warnings.filterwarnings("ignore")
 configuration = Path(__file__).parent / Path("config/config.yaml")
 
 

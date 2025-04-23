@@ -3,6 +3,7 @@ from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Any, Callable
 
+import click
 import lancedb
 import pandas as pd
 from lancedb.embeddings import get_registry
@@ -15,14 +16,13 @@ from knowledgerag.database.lancedb_lib.lancedb_client import LancedbDatabase
 from knowledgerag.database.lancedb_lib.lancedb_common import CollectionSettings, LanceDbSettings
 from knowledgerag.io.reader.reader import file_reader, reporting_file_info
 from knowledgerag.pipeline.local.ingestion_pipeline import DocumentProcessor
-from knowledgerag.utils.profilling import timeit
 
 
 class RAGmetadataLance:
     def __init__(
         self,
         target_database: Path | str,
-        metadata_table: str = "metadata",
+        metadata_table: str | None = "metadata",
         file_reader: Callable = file_reader,
         reporter: Callable = reporting_file_info,
     ) -> None:
@@ -177,7 +177,6 @@ def index_collection(db_path: str, table_name: str) -> None:
             pass
 
 
-@timeit
 def lancedb_standard_pipeline(filenames):
     """_summary_
 
@@ -213,9 +212,7 @@ def lancedb_standard_pipeline(filenames):
         page_info: str
         content_type: str
 
-    # result = rag_pipe(
-    #     directory=directory, processor=processor, db_uri=db_uri, db_table_name=db_table_name, schema=DbTableHybrid
-    # )
+    # docling isn't threath safe, and has some parallel processing, so performed sequentially.
     total = len(filenames)
     for n, filename in enumerate(filenames):
         logger.info(f"Processing file {n} of {total}: {filename}.")
@@ -226,14 +223,21 @@ def lancedb_standard_pipeline(filenames):
     index_collection(db_path=db_uri, table_name=db_table_name)
 
 
-if __name__ == "__main__":
+@click.command()
+@click.option("--data-dir", type=click.Path(), default="/home/jdiez/Downloads/test", help="Path to the data directory")
+def main(data_dir: str) -> None:
     configuration = read_configuration()
     pipe = configuration["pipeline"]["default"]
-    meta = pipe["storage"]["parameters"]["uri"]
-    rp = RAGmetadataLance(target_database=meta)
-    res = rp(input_directory="/home/jdiez/Downloads/test", ingestion=True)
+    db = pipe["storage"]["parameters"]["uri"]
+    meta = pipe["storage"]["parameters"]["metadata"]
+    rp = RAGmetadataLance(target_database=db, metadata_table=meta)
+    res = rp(input_directory=data_dir, ingestion=True)
     filenames = res.path.tolist()
     if filenames:
         lancedb_standard_pipeline(filenames)
     else:
         logger.info("Nothing to be ingested.")
+
+
+if __name__ == "__main__":
+    main()
