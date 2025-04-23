@@ -14,19 +14,21 @@ from knowledgerag.database.lancedb_lib.lancedb_client import LancedbDatabase
 from knowledgerag.database.lancedb_lib.lancedb_common import LanceDbSettings
 from knowledgerag.io.reader.reader import file_reader, reporting_file_info
 from knowledgerag.pipeline.local.ingestion_pipeline import DocumentProcessor
-from knowledgerag.splitting.late_chunking import LateChunking
+from knowledgerag.splitting.late_chunking import LateChunkingEmbedding
 
 
 class RAGmetadataLance:
     def __init__(
         self,
         target_database: Path | str,
-        metadata_table: str | None = "metadata",
+        metadata_table: str = "metadata",
+        data_table: str = "data",
         file_reader: Callable = file_reader,
         reporter: Callable = reporting_file_info,
     ) -> None:
         self.target_database = str(target_database)
         self.metadata_table = metadata_table
+        self.data_table = data_table
         self.file_reader = file_reader
         self.reporting_file_info = reporter
         self.db = lancedb.connect(uri=self.target_database)
@@ -47,14 +49,14 @@ class RAGmetadataLance:
         result = result if not result.empty else None
         return result
 
-    def get_existing_files_hash(self) -> pd.DataFrame | None:
+    def get_existing_files_hash(self, table: str) -> pd.DataFrame | None:
         """_summary_
 
         Returns:
             pd.DataFrame: _description_
         """
         try:
-            tbl = self.db.open_table(self.metadata_table)
+            tbl = self.db.open_table(table)
         except ValueError:
             df = None
         else:
@@ -92,18 +94,39 @@ class RAGmetadataLance:
                 tasks.append(loop.run_in_executor(executor, reporter, filename))
             return list(await tqdm_asyncio.gather(*tasks))
 
-    def ingest_new(self, data: pd.DataFrame) -> None:
+    def ingest_new(self, data: pd.DataFrame, table_name: str) -> None:
         """_summary_
 
         Args:
             data (pd.DataFrame): _description_
         """
         table_names = self.db.table_names()
-        if self.metadata_table in table_names:
-            table = self.db.open_table(self.metadata_table)
+        if table_name in table_names:
+            table = self.db.open_table(table_name)
             table.add(data)
         else:
-            self.db.create_table(name=self.metadata_table, data=data)
+            self.db.create_table(name=table_name, data=data)
+
+    def overwrite(self, data: pd.DataFrame, table_name: str) -> None:
+        """_summary_
+
+        Args:
+            data (pd.DataFrame): _description_
+        """
+        try:
+            self.db.create_table(name=table_name, data=data, mode="overwrite")
+        except Exception as e:
+            logger.error(e)
+
+    def sync_data_metadata(self) -> None:
+        """Be careful with it ..."""
+        metadata_table = self.db.open_table(self.metadata_table).to_pandas()
+        data_table = self.db.open_table(self.data_table).to_pandas()
+        common_hashes = set(metadata_table.hash_value.tolist()).intersection(set(data_table.hash_value.tolist()))
+        metadata_table_data = metadata_table[metadata_table.hash_value.isin(common_hashes)]
+        self.overwrite(data=metadata_table_data, table_name=self.metadata_table)
+        data_table_data = data_table[data_table.hash_value.isin(common_hashes)]
+        self.overwrite(data=data_table_data, table_name=self.data_table)
 
     def __call__(self, input_directory: str, ingestion: bool = False) -> pd.DataFrame | None:
         """_summary_
@@ -115,7 +138,7 @@ class RAGmetadataLance:
         Returns:
             pd.DataFrame | None: _description_
         """
-        current = self.get_existing_files_hash()
+        current = self.get_existing_files_hash(table=self.metadata_table)
         new = self.get_new_files_metadata(input_directory=input_directory)
         if new is None:
             result = new
@@ -126,7 +149,7 @@ class RAGmetadataLance:
             else:
                 result = new
             if ingestion:
-                self.ingest_new(result)
+                self.ingest_new(data=result, table_name=self.metadata_table)
         return result
 
 
@@ -218,7 +241,7 @@ def lancedb_standard_pipeline(filenames):
 
     # docling isn't threath safe, and has some parallel processing, so performed sequentially.
     total = len(filenames)
-    lt = LateChunking()
+    lt = LateChunkingEmbedding()
     for n, filename in enumerate(filenames):
         logger.info(f"Processing file {n + 1} of {total}: {filename}.")
         data = processor(filename)
@@ -247,9 +270,7 @@ def main(data_dir: str) -> None:
     configuration = read_configuration()
     pipe = configuration["pipeline"]["default"]
     db = pipe["storage"]["parameters"]["uri"]
-    print(db)
     meta = pipe["storage"]["parameters"]["metadata"]
-    print(meta)
     rp = RAGmetadataLance(target_database=db, metadata_table=meta)
     res = rp(input_directory=data_dir, ingestion=True)
     filenames = res.path.tolist()

@@ -8,7 +8,7 @@ from typing import Callable, Literal
 from transformers import AutoModel, AutoTokenizer
 
 
-class LateChunking:
+class LateChunkingEmbedding:
     """_summary_"""
 
     def __init__(
@@ -129,7 +129,7 @@ class LateChunking:
 
         Args:
             data (str): _description_
-            mode (Literal[&#39;late&#39;, &#39;vanilla&#39;], optional): _description_. Defaults to 'late'.
+            mode (Literal['late', 'vanilla'], optional): _description_. Defaults to 'late'.
 
         Raises:
             ValueError: _description_
